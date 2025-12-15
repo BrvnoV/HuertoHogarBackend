@@ -1,6 +1,9 @@
-package com.huertohogar.huertohogarbackend.model; // Ajusta el paquete
+package com.huertohogar.huertohogarbackend.model;
 
 import jakarta.persistence.*;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
@@ -11,27 +14,34 @@ import lombok.AllArgsConstructor;
 @AllArgsConstructor
 public class Producto {
 
-    // --- ID (Clave Primaria) ---
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id; // Cambiado de string a Long para usar autoincremental estándar de MySQL
+    private Long id;
 
-    // --- Propiedades del Producto ---
-    @Column(nullable = false)
+    @Column(nullable = false, unique = true)
+    @NotBlank(message = "El nombre es obligatorio")
     private String name;
 
     @Column(nullable = false)
-    private Double price; // Usamos Double o BigDecimal para precios
+    @DecimalMin(value = "0.01", message = "El precio debe ser mayor a 0")
+    @NotNull(message = "El precio es obligatorio")
+    private Double price;
+
+    // Relación ManyToOne: Muchas Productos pueden tener una Categoría.
+    // Composición: Producto tiene una Categoría obligatoria.
+    @ManyToOne(optional = false) // opcional = false forzando la relación en DB
+    @JoinColumn(name = "categoria_id", nullable = false)
+    @NotNull(message = "La categoría es obligatoria")
+    private Categoria category;
 
     @Column(nullable = false)
-    private String category;
-
-    @Column(nullable = false)
+    @NotNull(message = "El stock es obligatorio")
     private Integer stock;
 
-    private String image; // URL o ruta de la imagen
+    @NotBlank(message = "La imagen es obligatoria")
+    private String image;
 
-    @Column(columnDefinition = "TEXT") // TEXT permite mayor longitud para descripciones
+    @Column(columnDefinition = "TEXT")
     private String description;
 
     private String origin;
@@ -42,9 +52,5 @@ public class Producto {
     private String recipe;
 
     @Column(columnDefinition = "TEXT")
-    private String recommendations; // Almacenado como String (e.g., JSON o delimitado por comas)
-
-    // Si realmente necesitas que 'recommendations' sea una lista en Java,
-    // tendrías que usar un conversor JPA (@Convert) o una tabla separada.
-    // Para simplificar, lo manejaremos como un String largo (TEXT).
+    private String recommendations;
 }

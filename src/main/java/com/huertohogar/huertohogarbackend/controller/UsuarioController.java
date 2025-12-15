@@ -1,6 +1,7 @@
 package com.huertohogar.huertohogarbackend.controller;
 
 import com.huertohogar.huertohogarbackend.dto.LoginRequest;
+import com.huertohogar.huertohogarbackend.dto.RegistroRequest;  // NUEVO: Importa DTO
 import com.huertohogar.huertohogarbackend.model.Usuario;
 import com.huertohogar.huertohogarbackend.service.UsuarioService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,8 +21,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
 
+import jakarta.validation.Valid;  // NUEVO: Para @Valid en DTO
+
 @RestController
-@RequestMapping("/api/v1/usuarios") // <<< CAMBIO: URL base consistente con SecurityConfig
+@RequestMapping("/api/v1/usuarios")
 @Tag(name = "Usuarios", description = "Gestión de usuarios y autenticación")
 public class UsuarioController {
 
@@ -35,7 +38,7 @@ public class UsuarioController {
     // -------------------------------------------------------------
     // 1. LOGIN (ACCESO PÚBLICO)
     // -------------------------------------------------------------
-    @PostMapping("/login") // Endpoint: /api/v1/usuarios/login
+    @PostMapping("/login")
     @Operation(summary = "Iniciar Sesión",
             description = "Verifica credenciales, devuelve el Token JWT y el objeto Usuario.",
             security = @SecurityRequirement(name = ""))
@@ -64,27 +67,32 @@ public class UsuarioController {
     }
 
     // -------------------------------------------------------------
-// 2. REGISTRO (ACCESO PÚBLICO)
-// -------------------------------------------------------------
-// Endpoint: /api/v1/usuarios/register (POST)
-    @PostMapping("/register") // <<< CAMBIO: endpoint específico para registro
+    // 2. REGISTRO (ACCESO PÚBLICO)
+    // -------------------------------------------------------------
+    @PostMapping("/register")
     @Operation(summary = "Registrar Nuevo Usuario",
             description = "Permite el registro público de nuevos usuarios con rol 'USER'.")
-    public ResponseEntity<Usuario> crearUsuario(@RequestBody Usuario usuario) {
-        // Opcional: Asignar rol por default si no se proporciona (para usuarios públicos)
-        if (usuario.getRole() == null) {
-            usuario.setRole("USER");
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "201", description = "Usuario creado exitosamente"),
+            @ApiResponse(responseCode = "400", description = "Datos inválidos"),
+            @ApiResponse(responseCode = "409", description = "Email ya registrado")
+    })
+    public ResponseEntity<Usuario> crearUsuario(@Valid @RequestBody RegistroRequest request) {  // NUEVO: Usa DTO + @Valid
+        try {
+            Usuario nuevoUsuario = usuarioService.crearUsuarioFromRequest(request);  // NUEVO: Llama método con DTO
+            return ResponseEntity.status(HttpStatus.CREATED).body(nuevoUsuario);
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());  // 400 para validaciones
+        } catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Error interno al registrar usuario");  // 500 genérico
         }
-        Usuario nuevoUsuario = usuarioService.crearUsuario(usuario);
-        return ResponseEntity.status(HttpStatus.CREATED).body(nuevoUsuario);
     }
 
     // -------------------------------------------------------------
     // 3. GESTIÓN Y CONSULTA (RESTRINGIDO)
     // -------------------------------------------------------------
-
-    // Endpoint: /api/v1/usuarios (GET) - Listar todos
     @GetMapping
+    @PreAuthorize("hasAuthority('ADMIN')")  // NUEVO: Añadido para seguridad
     @Operation(summary = "Obtener Todos los Usuarios",
             description = "Devuelve una lista de todos los usuarios registrados. **Acceso: ADMIN**.",
             security = @SecurityRequirement(name = "bearerAuth"))
@@ -93,8 +101,8 @@ public class UsuarioController {
         return ResponseEntity.ok(usuarios);
     }
 
-    // Endpoint: /api/v1/usuarios/{id} (GET) - Obtener por ID
     @GetMapping("/{id}")
+    @PreAuthorize("hasAuthority('ADMIN') or authentication.principal.id == #id")  // NUEVO: Permite self-access
     @Operation(summary = "Obtener Usuario por ID",
             description = "Devuelve el perfil de un usuario específico. **Acceso: ADMIN o Propietario**.",
             security = @SecurityRequirement(name = "bearerAuth"))
@@ -105,8 +113,8 @@ public class UsuarioController {
                         HttpStatus.NOT_FOUND, "Usuario no encontrado con ID: " + id));
     }
 
-    // Endpoint: /api/v1/usuarios/{id} (PUT) - Actualizar por ID
     @PutMapping("/{id}")
+    @PreAuthorize("hasAuthority('ADMIN') or authentication.principal.id == #id")
     @Operation(summary = "Actualizar Usuario por ID",
             description = "Actualiza los datos del usuario. **Acceso: ADMIN o Propietario**.",
             security = @SecurityRequirement(name = "bearerAuth"))
@@ -115,13 +123,12 @@ public class UsuarioController {
             Usuario usuarioActualizado = usuarioService.actualizarUsuario(id, usuarioDetalles);
             return ResponseEntity.ok(usuarioActualizado);
         } catch (Exception e) {
-            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Usuario no encontrado: " + e.getMessage());
         }
     }
 
-    // Endpoint: /api/v1/usuarios/{id} (DELETE) - Eliminar por ID
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAuthority('ADMIN')")
     @Operation(summary = "Eliminar Usuario por ID",
             description = "Elimina permanentemente un usuario. **Acceso: ADMIN**.",
             security = @SecurityRequirement(name = "bearerAuth"))
@@ -130,19 +137,7 @@ public class UsuarioController {
             usuarioService.eliminarUsuario(id);
             return ResponseEntity.noContent().build();
         } catch (Exception e) {
-            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Usuario no encontrado: " + e.getMessage());
         }
     }
 }
-
-// Formulario Registro
-//{
-//  "nombre": "ronald",
-//  "apellido": "fuentes",
-//  "fechaNacimiento": "1990-01-01",
-//  "email": "ronald@gmail.com",
-//  "contrasena": "ronald123",
-//  "telefono": "string",
-//  "comuna": "string",
-//  "role": "USER"
-//}

@@ -6,6 +6,7 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface ProductoRepository extends JpaRepository<Producto, Long> {
+    boolean existsByName(String name);
 
     // Ejemplo de un método personalizado:
     // List<Producto> findByCategory(String category);

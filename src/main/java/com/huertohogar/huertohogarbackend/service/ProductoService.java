@@ -1,54 +1,148 @@
 package com.huertohogar.huertohogarbackend.service;
 
+import com.huertohogar.huertohogarbackend.dto.ProductoRequest;  // NUEVO: Importa el DTO
+import com.huertohogar.huertohogarbackend.model.Categoria;
 import com.huertohogar.huertohogarbackend.model.Producto;
+import com.huertohogar.huertohogarbackend.repository.CategoriaRepository;
 import com.huertohogar.huertohogarbackend.repository.ProductoRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;  // Opcional: Para logging
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Optional;
 
 @Service
-@RequiredArgsConstructor // Inyecta el repositorio vía constructor
+@RequiredArgsConstructor
+@Slf4j  // Opcional: Activa logging con @Slf4j (añade dependency si no tienes)
 public class ProductoService {
 
     private final ProductoRepository productoRepository;
-
-    // --- MÉTODOS CRUD ---
+    private final CategoriaRepository categoriaRepository;
 
     /**
-     * Crea un nuevo producto.
+     * NUEVO: Método para crear producto desde DTO (evita deserialización parcial de entidades).
+     * Recomendado para el controller POST.
      */
-    public Producto crearProducto(Producto producto) {
-        // Lógica de negocio antes de guardar, si fuera necesaria (ej. validaciones de stock inicial)
+    public Producto crearProductoFromRequest(ProductoRequest request) {
+        // Validar nombre único
+        if (productoRepository.existsByName(request.getName())) {
+            throw new IllegalArgumentException("Ya existe un producto con el nombre: " + request.getName());
+        }
+
+        // Validar y cargar categoría desde ID
+        Categoria categoria = categoriaRepository.findById(request.getCategoryId())
+                .orElseThrow(() -> new IllegalArgumentException("La categoría especificada no existe: " + request.getCategoryId()));
+
+        // Mapear DTO a nueva entidad Producto
+        Producto producto = new Producto();
+        producto.setName(request.getName());
+        producto.setPrice(request.getPrice());
+        producto.setCategory(categoria);  // Entidad completa resuelta
+        producto.setStock(request.getStock());
+        producto.setImage(request.getImage());
+        producto.setDescription(request.getDescription());
+        producto.setOrigin(request.getOrigin());
+        producto.setSustainability(request.getSustainability());
+        producto.setRecipe(request.getRecipe());
+        producto.setRecommendations(request.getRecommendations());
+
+        // Opcional: Log para depuración
+        log.info("Creando producto: {} con categoría ID: {}", request.getName(), request.getCategoryId());
+
         return productoRepository.save(producto);
     }
 
     /**
-     * Obtiene la lista de todos los productos.
+     * MÉTODO ANTIGUO: Mantén para compatibilidad si lo usas en otros lugares,
+     * pero migra a FromRequest para nuevos endpoints.
      */
+    public Producto crearProducto(Producto producto) {
+        // Validar nombre único
+        if (productoRepository.existsByName(producto.getName())) {
+            throw new IllegalArgumentException("Ya existe un producto con el nombre: " + producto.getName());
+        }
+
+        // Validar y vincular categoría existente
+        if (producto.getCategory() != null && producto.getCategory().getId() != null) {
+            Categoria categoria = categoriaRepository.findById(producto.getCategory().getId())
+                    .orElseThrow(() -> new IllegalArgumentException("La categoría especificada no existe"));
+            producto.setCategory(categoria);
+        } else {
+            throw new IllegalArgumentException("La categoría es obligatoria");
+        }
+
+        return productoRepository.save(producto);
+    }
+
     public List<Producto> obtenerTodosLosProductos() {
         return productoRepository.findAll();
     }
 
-    /**
-     * Obtiene un producto por su ID.
-     */
     public Optional<Producto> obtenerProductoPorId(Long id) {
         return productoRepository.findById(id);
     }
 
     /**
-     * Actualiza los detalles de un producto existente.
-     * Lanza una RuntimeException si el producto no se encuentra.
+     * NUEVO: Método para actualizar desde DTO (evita deserialización parcial).
+     * Recomendado para el controller PUT.
+     */
+    public Producto actualizarProductoFromRequest(Long id, ProductoRequest request) {
+        return productoRepository.findById(id).map(productoExistente -> {
+            // Validar nombre único si ha cambiado
+            if (!productoExistente.getName().equals(request.getName()) &&
+                    productoRepository.existsByName(request.getName())) {
+                throw new IllegalArgumentException("Ya existe un producto con el nombre: " + request.getName());
+            }
+
+            // Validar y cargar categoría si se proporciona un nuevo ID
+            if (request.getCategoryId() != null) {
+                Categoria categoria = categoriaRepository.findById(request.getCategoryId())
+                        .orElseThrow(() -> new IllegalArgumentException("La categoría especificada no existe: " + request.getCategoryId()));
+                productoExistente.setCategory(categoria);
+            }
+
+            // Mapear campos del DTO
+            productoExistente.setName(request.getName());
+            productoExistente.setPrice(request.getPrice());
+            productoExistente.setStock(request.getStock());
+            productoExistente.setImage(request.getImage());
+            productoExistente.setDescription(request.getDescription());
+            productoExistente.setOrigin(request.getOrigin());
+            productoExistente.setSustainability(request.getSustainability());
+            productoExistente.setRecipe(request.getRecipe());
+            productoExistente.setRecommendations(request.getRecommendations());
+
+            // Opcional: Log
+            log.info("Actualizando producto ID: {} con nuevo nombre: {}", id, request.getName());
+
+            return productoRepository.save(productoExistente);
+        }).orElseThrow(() -> new RuntimeException("Producto no encontrado con ID: " + id));
+    }
+
+    /**
+     * MÉTODO ANTIGUO: Mantén para compatibilidad.
      */
     public Producto actualizarProducto(Long id, Producto productoDetalles) {
         return productoRepository.findById(id).map(productoExistente -> {
 
-            // 1. Actualizar todos los campos requeridos y opcionales
+            // Validar nombre único si ha cambiado
+            if (!productoExistente.getName().equals(productoDetalles.getName()) &&
+                    productoRepository.existsByName(productoDetalles.getName())) {
+                throw new IllegalArgumentException(
+                        "Ya existe un producto con el nombre: " + productoDetalles.getName());
+            }
+
             productoExistente.setName(productoDetalles.getName());
             productoExistente.setPrice(productoDetalles.getPrice());
-            productoExistente.setCategory(productoDetalles.getCategory());
+
+            // Validar categoría si cambia
+            if (productoDetalles.getCategory() != null && productoDetalles.getCategory().getId() != null) {
+                Categoria categoria = categoriaRepository.findById(productoDetalles.getCategory().getId())
+                        .orElseThrow(() -> new IllegalArgumentException("La categoría especificada no existe"));
+                productoExistente.setCategory(categoria);
+            }
+
             productoExistente.setStock(productoDetalles.getStock());
             productoExistente.setImage(productoDetalles.getImage());
             productoExistente.setDescription(productoDetalles.getDescription());
@@ -59,18 +153,12 @@ public class ProductoService {
 
             return productoRepository.save(productoExistente);
 
-        }).orElseThrow(() -> new RuntimeException("Producto no encontrado para actualización con ID: " + id));
-        // La RuntimeException será capturada por el ProductoController para devolver 404
+        }).orElseThrow(() -> new RuntimeException("Producto no encontrado con ID: " + id));
     }
 
-    /**
-     * Elimina un producto por su ID.
-     * Lanza una RuntimeException si el producto no se encuentra.
-     */
     public void eliminarProducto(Long id) {
-        // Verificar si existe antes de eliminar para devolver 404 si no existe
         if (!productoRepository.existsById(id)) {
-            throw new RuntimeException("Producto no encontrado para eliminación con ID: " + id);
+            throw new RuntimeException("Producto no encontrado con ID: " + id);
         }
         productoRepository.deleteById(id);
     }

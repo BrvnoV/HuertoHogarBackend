@@ -2,23 +2,23 @@ package com.huertohogar.huertohogarbackend.controller;
 
 import com.huertohogar.huertohogarbackend.model.Producto;
 import com.huertohogar.huertohogarbackend.service.ProductoService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
-
-// --- Importaciones de Swagger/OpenAPI ---
-import io.swagger.v3.oas.annotations.tags.Tag;
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import com.huertohogar.huertohogarbackend.dto.ProductoRequest;
 
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/v1/productos") // URL base consistente
-// <<< TAG A NIVEL DE CLASE >>>
-@Tag(name = "Productos", description = "Gestión del catálogo de productos (CRUD)")
+@RequestMapping("/api/v1/productos")
+@Tag(name = "Productos", description = "Gestión del catálogo de productos")
 public class ProductoController {
 
     private final ProductoService productoService;
@@ -28,67 +28,61 @@ public class ProductoController {
         this.productoService = productoService;
     }
 
-    // 1. POST - Crear Producto
+    // En la clase:
     @PostMapping
-    @Operation(summary = "Crear Nuevo Producto",
-            description = "Agrega un nuevo producto al catálogo. **Acceso: ADMIN**.",
-            security = @SecurityRequirement(name = "bearerAuth")) // Protegido
-    public ResponseEntity<Producto> crearProducto(@RequestBody Producto producto) {
-        // La lógica de negocio está en el servicio
-        Producto nuevoProducto = productoService.crearProducto(producto);
-        return new ResponseEntity<>(nuevoProducto, HttpStatus.CREATED); // 201 Created
-    }
-
-    // 2. GET - Obtener todos los productos
-    @GetMapping
-    @Operation(summary = "Obtener Todos los Productos",
-            description = "Devuelve una lista completa de productos. **Acceso: Público**.")
-    public ResponseEntity<List<Producto>> obtenerTodos() {
-        List<Producto> productos = productoService.obtenerTodosLosProductos();
-        return ResponseEntity.ok(productos); // 200 OK
-    }
-
-    // 3. GET - Obtener producto por ID
-    @GetMapping("/{id}")
-    @Operation(summary = "Obtener Producto por ID",
-            description = "Devuelve los detalles de un producto específico. **Acceso: Público**.")
-    public ResponseEntity<Producto> obtenerPorId(@PathVariable Long id) {
-        // Uso idiomático de orElseThrow para devolver 404 si no se encuentra
-        return productoService.obtenerProductoPorId(id)
-                .map(ResponseEntity::ok)
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND, "Producto no encontrado con ID: " + id));
-    }
-
-    // 4. PUT - Actualizar producto por ID
-    @PutMapping("/{id}")
-    @Operation(summary = "Actualizar Producto por ID",
-            description = "Actualiza los detalles de un producto existente. **Acceso: ADMIN**.",
-            security = @SecurityRequirement(name = "bearerAuth")) // Protegido
-    public ResponseEntity<Producto> actualizarProducto(@PathVariable Long id, @RequestBody Producto productoDetalles) {
+    @PreAuthorize("hasAuthority('ADMIN')")
+    @Operation(summary = "Crear Nuevo Producto", description = "Acceso: ADMIN", security = @SecurityRequirement(name = "bearerAuth"))
+    public ResponseEntity<Producto> crearProducto(@Valid @RequestBody ProductoRequest request) {  // Cambia a DTO
         try {
-            // El servicio lanza RuntimeException si no encuentra el ID, capturada aquí para devolver 404
-            Producto productoActualizado = productoService.actualizarProducto(id, productoDetalles);
-            return ResponseEntity.ok(productoActualizado);
-        } catch (Exception e) {
-            // Devuelve 404 Not Found
-            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+            Producto nuevoProducto = productoService.crearProductoFromRequest(request);  // Nuevo método en service
+            return new ResponseEntity<>(nuevoProducto, HttpStatus.CREATED);
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+        } catch (Exception e) {  // Catch para SQL/otros errores
+            // Opcional: log.error("Error interno: ", e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Error interno al guardar producto");
         }
     }
 
-    // 5. DELETE - Eliminar producto por ID
+    @GetMapping
+    @Operation(summary = "Obtener Todos los Productos", description = "Acceso: Público")
+    public ResponseEntity<List<Producto>> obtenerTodos() {
+        return ResponseEntity.ok(productoService.obtenerTodosLosProductos());
+    }
+
+    @GetMapping("/{id}")
+    @Operation(summary = "Obtener Producto por ID", description = "Acceso: Público")
+    public ResponseEntity<Producto> obtenerPorId(@PathVariable Long id) {
+        return productoService.obtenerProductoPorId(id)
+                .map(ResponseEntity::ok)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Producto no encontrado"));
+    }
+
+    @PutMapping("/{id}")
+    @PreAuthorize("hasAuthority('ADMIN')")
+    @Operation(summary = "Actualizar Producto", description = "Acceso: ADMIN", security = @SecurityRequirement(name = "bearerAuth"))
+    public ResponseEntity<Producto> actualizarProducto(@PathVariable Long id, @Valid @RequestBody ProductoRequest request) {  // Cambia a DTO
+        try {
+            Producto actualizado = productoService.actualizarProductoFromRequest(id, request);  // Nuevo método
+            return ResponseEntity.ok(actualizado);
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage());
+        } catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Error interno al actualizar");
+        }
+    }
+
     @DeleteMapping("/{id}")
-    @Operation(summary = "Eliminar Producto por ID",
-            description = "Elimina un producto del catálogo permanentemente. **Acceso: ADMIN**.",
-            security = @SecurityRequirement(name = "bearerAuth")) // Protegido
+    @PreAuthorize("hasAuthority('ADMIN')")
+    @Operation(summary = "Eliminar Producto", description = "Acceso: ADMIN", security = @SecurityRequirement(name = "bearerAuth"))
     public ResponseEntity<Void> eliminarProducto(@PathVariable Long id) {
         try {
-            // El servicio verifica existencia y lanza excepción si es necesario
             productoService.eliminarProducto(id);
-            return ResponseEntity.noContent().build(); // 204 No Content
-        } catch (Exception e) {
-            // Devuelve 404 Not Found
-            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+            return ResponseEntity.noContent().build();
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage());
         }
     }
 }

@@ -17,7 +17,10 @@ public class WebConfig implements WebMvcConfigurer {
                 .allowedOrigins(
                         "http://localhost:3000", // Ejemplo: React, Vite
                         "http://localhost:4200", // Ejemplo: Angular
-                        "http://localhost:8081"  // Ejemplo: Otro puerto de desarrollo
+                        "http://localhost:8081", // Ejemplo: Otro puerto de desarrollo
+                        "http://localhost:5173",
+                        "http://localhost:8080"
+
                 )
 
                 // MÉTODOS HTTP PERMITIDOS: Permite todos los verbos REST

@@ -11,8 +11,10 @@ import org.springframework.stereotype.Service;
 import java.security.Key;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 public class JwtService {
@@ -25,15 +27,35 @@ public class JwtService {
         return extractClaim(token, Claims::getSubject);
     }
 
+    // NUEVO: Método para extraer authorities del token (útil para depuración o futuro)
+    @SuppressWarnings("unchecked")
+    public List<String> extractAuthorities(String token) {
+        final Claims claims = extractAllClaims(token);
+        return claims.get("authorities", List.class);
+    }
+
     public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
         final Claims claims = extractAllClaims(token);
         return claimsResolver.apply(claims);
     }
 
     public String generateToken(UserDetails userDetails) {
-        // Añadimos el rol/authorities a los claims del token
+        // Extraemos authorities de forma segura (maneja vacío)
+        List<String> authoritiesList = userDetails.getAuthorities().stream()
+                .map(grantedAuthority -> grantedAuthority.getAuthority())
+                .collect(Collectors.toList());
+
+        // Rol principal: primera authority o default "USUARIO"
+        String role = authoritiesList.isEmpty() ? "USUARIO" : authoritiesList.get(0);
+
+        // Claims: rol simple + lista completa para robustez
         Map<String, Object> extraClaims = new HashMap<>();
-        extraClaims.put("role", userDetails.getAuthorities().iterator().next().getAuthority());
+        extraClaims.put("role", role); // Para compatibilidad con frontend actual
+        extraClaims.put("authorities", authoritiesList); // Lista para casos múltiples
+
+        // Opcional: Log para depuración (comenta en prod)
+        // System.out.println("Generando token para user: " + userDetails.getUsername() + " con role: " + role);
+
         return generateToken(extraClaims, userDetails);
     }
 

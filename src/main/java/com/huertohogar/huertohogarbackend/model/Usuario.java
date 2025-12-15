@@ -1,5 +1,6 @@
 package com.huertohogar.huertohogarbackend.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;  // NUEVO: Oculta contraseña en respuestas JSON
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -13,17 +14,15 @@ import java.util.Collection;
 import java.util.List;
 
 @Entity
-@Data // <<< CORRECCIÓN: Genera los SETTERS (soluciona los errores 'setNombre', 'setApellido', etc.)
+@Data
 @NoArgsConstructor
 @AllArgsConstructor
-// IMPLEMENTA UserDetails (Soluciona el error de conversión en SecurityConfig)
 public class Usuario implements UserDetails {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // Campos del modelo
     @Column(nullable = false)
     private String nombre;
 
@@ -37,23 +36,17 @@ public class Usuario implements UserDetails {
     private String email;
 
     @Column(nullable = false)
+    @JsonIgnore  // NUEVO: No expone contraseña en JSON responses
     private String contrasena;
 
     private String telefono;
     private String comuna;
 
-    // Asumimos que es String ya que no tienes el enum Role
     @Column(nullable = false)
-    private String role; // "ADMIN" o "USER"
-
-
-    // ----------------------------------------------------
-    // IMPLEMENTACIÓN DE USERDETAILS (REQUERIDO POR SPRING SECURITY)
-    // ----------------------------------------------------
+    private String role;  // "ADMIN" o "USER"
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        // Mapea el campo 'role' (String) a la autoridad que Spring Security espera
         return List.of(new SimpleGrantedAuthority(role));
     }
 
@@ -67,7 +60,6 @@ public class Usuario implements UserDetails {
         return email;
     }
 
-    // Las siguientes siempre se dejan como 'true' si no se implementa lógica de bloqueo/expiración
     @Override
     public boolean isAccountNonExpired() { return true; }
 

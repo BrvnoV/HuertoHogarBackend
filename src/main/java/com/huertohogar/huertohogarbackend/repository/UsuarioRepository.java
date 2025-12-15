@@ -1,4 +1,4 @@
-package com.huertohogar.huertohogarbackend.repository; // Ajusta el paquete
+package com.huertohogar.huertohogarbackend.repository;
 
 import com.huertohogar.huertohogarbackend.model.Usuario;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -9,4 +9,7 @@ import java.util.Optional;
 @Repository
 public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
     Optional<Usuario> findByEmail(String email);
+
+    // NUEVO: Explícito para existsByEmail (resuelve error de IDE)
+    boolean existsByEmail(String email);
 }
