@@ -12,7 +12,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
-import com.huertohogar.huertohogarbackend.dto.ProductoRequest;
 
 import java.util.List;
 
@@ -28,19 +27,15 @@ public class ProductoController {
         this.productoService = productoService;
     }
 
-    // En la clase:
     @PostMapping
     @PreAuthorize("hasAuthority('ADMIN')")
     @Operation(summary = "Crear Nuevo Producto", description = "Acceso: ADMIN", security = @SecurityRequirement(name = "bearerAuth"))
-    public ResponseEntity<Producto> crearProducto(@Valid @RequestBody ProductoRequest request) {  // Cambia a DTO
+    public ResponseEntity<Producto> crearProducto(@Valid @RequestBody Producto producto) {
         try {
-            Producto nuevoProducto = productoService.crearProductoFromRequest(request);  // Nuevo método en service
+            Producto nuevoProducto = productoService.crearProducto(producto);
             return new ResponseEntity<>(nuevoProducto, HttpStatus.CREATED);
         } catch (IllegalArgumentException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
-        } catch (Exception e) {  // Catch para SQL/otros errores
-            // Opcional: log.error("Error interno: ", e);
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Error interno al guardar producto");
         }
     }
 
@@ -61,16 +56,14 @@ public class ProductoController {
     @PutMapping("/{id}")
     @PreAuthorize("hasAuthority('ADMIN')")
     @Operation(summary = "Actualizar Producto", description = "Acceso: ADMIN", security = @SecurityRequirement(name = "bearerAuth"))
-    public ResponseEntity<Producto> actualizarProducto(@PathVariable Long id, @Valid @RequestBody ProductoRequest request) {  // Cambia a DTO
+    public ResponseEntity<Producto> actualizarProducto(@PathVariable Long id,
+                                                       @Valid @RequestBody Producto productoDetalles) {
         try {
-            Producto actualizado = productoService.actualizarProductoFromRequest(id, request);  // Nuevo método
-            return ResponseEntity.ok(actualizado);
+            return ResponseEntity.ok(productoService.actualizarProducto(id, productoDetalles));
         } catch (IllegalArgumentException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
         } catch (RuntimeException e) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage());
-        } catch (Exception e) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Error interno al actualizar");
         }
     }
 

@@ -32,18 +32,17 @@ public class UsuarioService implements UserDetailsService {
     @Override
     @Transactional(readOnly = true)
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
+        // NOTA: Esta implementación causaba el error 403 y el error de compilación posterior (getId())
         return usuarioRepository.findByEmail(email)
                 .orElseThrow(() -> new UsernameNotFoundException("Usuario no encontrado con email: " + email));
     }
 
     @Transactional
     public Usuario crearUsuarioFromRequest(RegistroRequest request) {
-        // Validar email único
         if (usuarioRepository.existsByEmail(request.getEmail())) {
             throw new IllegalArgumentException("Email ya registrado: " + request.getEmail());
         }
 
-        // Mapear DTO a Usuario
         Usuario usuario = new Usuario();
         usuario.setNombre(request.getNombre());
         usuario.setApellido(request.getApellido());
@@ -51,9 +50,8 @@ public class UsuarioService implements UserDetailsService {
         usuario.setEmail(request.getEmail());
         usuario.setTelefono(request.getTelefono());
         usuario.setComuna(request.getComuna());
-        usuario.setRole("USUARIO");  // FIX: Cambiado de "USER" a "USUARIO" para frontend
+        usuario.setRole("USUARIO");
 
-        // Encriptar contraseña
         String contrasenaHash = passwordEncoder.encode(request.getContraseña());
         usuario.setContrasena(contrasenaHash);
 
@@ -62,7 +60,6 @@ public class UsuarioService implements UserDetailsService {
         return usuarioRepository.save(usuario);
     }
 
-    // Método antiguo: También cambia a "USUARIO"
     @Transactional
     public Usuario crearUsuario(Usuario usuario) {
         if (usuarioRepository.existsByEmail(usuario.getEmail())) {
@@ -70,7 +67,7 @@ public class UsuarioService implements UserDetailsService {
         }
 
         if (usuario.getRole() == null || usuario.getRole().isEmpty()) {
-            usuario.setRole("USUARIO");  // FIX: Cambiado de "USER"
+            usuario.setRole("USUARIO");
         }
 
         String contrasenaHash = passwordEncoder.encode(usuario.getContrasena());
@@ -83,6 +80,7 @@ public class UsuarioService implements UserDetailsService {
         Usuario user = usuarioRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("Credenciales inválidas"));
 
+        // NOTA: Esta es la lógica manual de matching que fallaba con 401
         if (!passwordEncoder.matches(contrasena, user.getContrasena())) {
             throw new RuntimeException("Credenciales inválidas");
         }
@@ -99,6 +97,16 @@ public class UsuarioService implements UserDetailsService {
     public Optional<Usuario> obtenerUsuarioPorId(Long id) {
         return usuarioRepository.findById(id);
     }
+    @Transactional(readOnly = true)
+    public Optional<Usuario> obtenerUsuarioPorEmail(String email) {
+        // Asume que tienes un método findByEmail en tu UsuarioRepository
+        return usuarioRepository.findByEmail(email);
+    }
+
+    // Método que hacía falta en la versión original, pero que no estaba
+    // public Optional<Usuario> obtenerUsuarioPorEmail(String email) {
+    //     return usuarioRepository.findByEmail(email);
+    // }
 
     @Transactional
     public Usuario actualizarUsuario(Long id, Usuario usuarioDetalles) {
@@ -112,7 +120,7 @@ public class UsuarioService implements UserDetailsService {
             usuarioExistente.setApellido(usuarioDetalles.getApellido());
             usuarioExistente.setFechaNacimiento(usuarioDetalles.getFechaNacimiento());
             usuarioExistente.setEmail(usuarioDetalles.getEmail());
-            usuarioExistente.setRole(usuarioDetalles.getRole());  // Permite update a "ADMIN" si es admin
+            usuarioExistente.setRole(usuarioDetalles.getRole());
 
             if (usuarioDetalles.getContrasena() != null && !usuarioDetalles.getContrasena().isEmpty()) {
                 String nuevaContrasenaHash = passwordEncoder.encode(usuarioDetalles.getContrasena());

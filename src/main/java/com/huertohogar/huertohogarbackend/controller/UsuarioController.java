@@ -1,7 +1,7 @@
 package com.huertohogar.huertohogarbackend.controller;
 
 import com.huertohogar.huertohogarbackend.dto.LoginRequest;
-import com.huertohogar.huertohogarbackend.dto.RegistroRequest;  // NUEVO: Importa DTO
+import com.huertohogar.huertohogarbackend.dto.RegistroRequest;
 import com.huertohogar.huertohogarbackend.model.Usuario;
 import com.huertohogar.huertohogarbackend.service.UsuarioService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,7 +21,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
 
-import jakarta.validation.Valid;  // NUEVO: Para @Valid en DTO
+import jakarta.validation.Valid;
+// import org.springframework.security.core.userdetails.UserDetails; // Ya no es necesario importar solo UserDetails
 
 @RestController
 @RequestMapping("/api/v1/usuarios")
@@ -52,8 +53,13 @@ public class UsuarioController {
             String email = loginRequest.getEmail();
             String contrasena = loginRequest.getContrasena();
 
+            // 1. Autenticación (se lanza excepción si falla)
             String token = usuarioService.login(email, contrasena);
-            Usuario user = (Usuario) usuarioService.loadUserByUsername(email);
+
+            // 2. Obtener el objeto Usuario completo para devolver al frontend
+            // CRÍTICO: Ya no usamos getId() de UserDetails. Usamos el email para obtener el objeto Usuario.
+            Usuario user = usuarioService.obtenerUsuarioPorEmail(email)
+                    .orElseThrow(() -> new RuntimeException("Error interno: Usuario autenticado no encontrado en DB"));
 
             Map<String, Object> response = new HashMap<>();
             response.put("token", token);
@@ -62,29 +68,32 @@ public class UsuarioController {
             return ResponseEntity.ok(response);
 
         } catch (Exception e) {
+            // El servicio lanza RuntimeException("Credenciales inválidas") que se mapea a 401
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Credenciales inválidas.");
         }
     }
+
+    // ... (El resto de métodos están correctos y no necesitan cambios)
 
     // -------------------------------------------------------------
     // 2. REGISTRO (ACCESO PÚBLICO)
     // -------------------------------------------------------------
     @PostMapping("/register")
     @Operation(summary = "Registrar Nuevo Usuario",
-            description = "Permite el registro público de nuevos usuarios con rol 'USER'.")
+            description = "Permite el registro público de nuevos usuarios con rol 'USUARIO'.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "201", description = "Usuario creado exitosamente"),
             @ApiResponse(responseCode = "400", description = "Datos inválidos"),
             @ApiResponse(responseCode = "409", description = "Email ya registrado")
     })
-    public ResponseEntity<Usuario> crearUsuario(@Valid @RequestBody RegistroRequest request) {  // NUEVO: Usa DTO + @Valid
+    public ResponseEntity<Usuario> crearUsuario(@Valid @RequestBody RegistroRequest request) {
         try {
-            Usuario nuevoUsuario = usuarioService.crearUsuarioFromRequest(request);  // NUEVO: Llama método con DTO
+            Usuario nuevoUsuario = usuarioService.crearUsuarioFromRequest(request);
             return ResponseEntity.status(HttpStatus.CREATED).body(nuevoUsuario);
         } catch (IllegalArgumentException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());  // 400 para validaciones
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
         } catch (Exception e) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Error interno al registrar usuario");  // 500 genérico
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Error interno al registrar usuario");
         }
     }
 
@@ -92,7 +101,7 @@ public class UsuarioController {
     // 3. GESTIÓN Y CONSULTA (RESTRINGIDO)
     // -------------------------------------------------------------
     @GetMapping
-    @PreAuthorize("hasAuthority('ADMIN')")  // NUEVO: Añadido para seguridad
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
     @Operation(summary = "Obtener Todos los Usuarios",
             description = "Devuelve una lista de todos los usuarios registrados. **Acceso: ADMIN**.",
             security = @SecurityRequirement(name = "bearerAuth"))
@@ -102,7 +111,7 @@ public class UsuarioController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAuthority('ADMIN') or authentication.principal.id == #id")  // NUEVO: Permite self-access
+    @PreAuthorize("hasAuthority('ROLE_ADMIN') or authentication.name == #id")
     @Operation(summary = "Obtener Usuario por ID",
             description = "Devuelve el perfil de un usuario específico. **Acceso: ADMIN o Propietario**.",
             security = @SecurityRequirement(name = "bearerAuth"))
@@ -114,7 +123,7 @@ public class UsuarioController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAuthority('ADMIN') or authentication.principal.id == #id")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN') or authentication.name == #id")
     @Operation(summary = "Actualizar Usuario por ID",
             description = "Actualiza los datos del usuario. **Acceso: ADMIN o Propietario**.",
             security = @SecurityRequirement(name = "bearerAuth"))
@@ -128,7 +137,7 @@ public class UsuarioController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAuthority('ADMIN')")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
     @Operation(summary = "Eliminar Usuario por ID",
             description = "Elimina permanentemente un usuario. **Acceso: ADMIN**.",
             security = @SecurityRequirement(name = "bearerAuth"))
